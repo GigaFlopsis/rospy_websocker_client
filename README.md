@@ -55,7 +55,6 @@ Publish to server:
 
 Call service from server
 ```
-    from rospy_message_converter import json_message_converter
    # 1. the name of the service on server where to call;
    # 2. the service request message 
    connect.call_service('/ropic_of_service', srv_pub)
