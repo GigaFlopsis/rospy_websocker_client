@@ -33,11 +33,8 @@ class ws_client(Thread):
         """
         Thread.__init__(self)
 
-        print("Connecting to websocket: {}:{}".format(websocket_ip, port))
 
         self.name = websocket_ip if name == '' else name
-        print(self.name)
-
         self._ip = websocket_ip
         self._port = port
 
@@ -55,17 +52,26 @@ class ws_client(Thread):
         self.daemon = True #param for tread
 
     def connect(self, ip = None, port = None):
+
+        if self._runFlag or self.is_connect() :
+            print("The client is already connected")
+            return
         if ip == None:
             ip = self._ip
         if port == None:
             port = self._port
-        print("Connected to %s:%s" %(ip, port))
-        self._runFlag = False
 
-        self._ws = websocket.create_connection(
-            'ws://' + ip + ':' + str(port))
+        print("%s:%s\t|\tConnection to server" %(ip, port))
+        try:
+
+            self._ws = websocket.create_connection(
+                'ws://' + ip + ':' + str(port))
+        except:
+            print("%s:%s\t|\tError connecting to server !!!" %(ip, port))
+            return
+        print("%s:%s\t|\tThe connection is successful: " %(ip,port))
+
         self._advertise_dict = {}
-
         self._connect_flag = True
 
         # subscribe to
@@ -79,8 +85,7 @@ class ws_client(Thread):
     def disconnect(self):
         print("disconnect")
         if self._runFlag:
-            self._ws.close()
-            self._runFlag = False
+            self.__del__()
 
     def run(self):
         """Run of thread"""
@@ -135,7 +140,6 @@ class ws_client(Thread):
                 self._connect_flag = False
                 return
 
-
     def __del__(self):
         """Cleanup all advertisings"""
         d = self._advertise_dict
@@ -178,7 +182,6 @@ class ws_client(Thread):
         """
         # First check if we already advertised the topic
 
-
         d = self._advertise_dict
         for k in d:
             if d[k]['topic_name'] == topic_name:
@@ -214,7 +217,7 @@ class ws_client(Thread):
         json_msg = json.dumps(pub_msg)
         self._ws.send(json_msg)
         self.initFlaf = True
-        print("%s | Sub to: %s msgs_data: %s" % (self.name, topic_name, msgs_data._type))
+        print("%s:%s\t|\tSubscribe to: %s \ttype: %s" % (self._ip, self._port, topic_name, msgs_data._type))
 
     def _callback(self):
         """
@@ -239,7 +242,6 @@ class ws_client(Thread):
         type_msg = json.loads(json_message)['op']
         print(type_msg)
         if type_msg == 'publish':
-            print('publish msg')
             # conver json to ROS msgs
             msgs_conf =  self.sub_list[json.loads(json_message)['topic']]
             dictionary = json.loads(json_message)['msg']
