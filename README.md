@@ -30,7 +30,7 @@ Init websocket client:
 
 ``` python
     from rospy_websocker_client import WebsocketROSClient as ros_ws
-    connect = ros_ws('128.0.0.1', 9090) # ip, port, name of client
+    ws_client = ros_ws('128.0.0.1', 9090) # ip, port, name of client
     ws_client.connect()
 
  ```
@@ -48,7 +48,7 @@ Subscribe to topics from server:
     # 1. The name of the topic server;
     # 2. The type of topic
     # 3. The name of the topic where to publish
-    connect.subscribe('/position', PoseStamped(), '/position')
+    ws_client.subscribe('/position', PoseStamped(), '/position')
 ```
 Publish to server:
 
@@ -59,12 +59,12 @@ Publish to server:
     msg.data = "Test message"
     # 1. the name of the topic on server where to publish; 
     # 2. the message
-    connect.publish("/client_topic",msg)
+    ws_client.publish("/client_topic",msg)
 ```
 
 Call service from server
 ```
    # 1. the name of the service on server where to call;
    # 2. the service request message 
-   connect.call_service('/ropic_of_service', srv_pub)
+   ws_client.call_service('/ropic_of_service', srv_pub)
 ```
