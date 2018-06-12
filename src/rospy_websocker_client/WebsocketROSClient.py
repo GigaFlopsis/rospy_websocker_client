@@ -24,7 +24,7 @@ from rospy import Header
 """
 
 
-class WebsocketROSClient(Thread, object):
+class ws_client(Thread):
     def __init__(self, websocket_ip, port=9090, name =''):
         """
         Class to manage publishing to ROS thru a rosbridge websocket.
@@ -38,24 +38,63 @@ class WebsocketROSClient(Thread, object):
         self.name = websocket_ip if name == '' else name
         print(self.name)
 
-        self.initFlaf = False
-        self.runFlag = True
+        self._ip = websocket_ip
+        self._port = port
+
+
         # List for for each sub topic.
         # Where: key = sub_topic; data = [type_data, pub_topic_name,rospy.Publisher(..)]
         self.sub_list = {}
 
-        self.ws = websocket.create_connection(
-            'ws://' + websocket_ip + ':' + str(port))
+        self._runFlag = False
+        self._connect_flag = False
+
+        self._ws = None
         self._advertise_dict = {}
 
+        self.daemon = True #param for tread
+
+    def connect(self, ip = None, port = None):
+        if ip == None:
+            ip = self._ip
+        if port == None:
+            port = self._port
+        print("Connected to %s:%s" %(ip, port))
+        self._runFlag = False
+
+        self._ws = websocket.create_connection(
+            'ws://' + ip + ':' + str(port))
+        self._advertise_dict = {}
+
+        self._connect_flag = True
+
+        # subscribe to
+        for key in self.sub_list:
+            self._subscribe(key,self.sub_list[key][0])
+
+        self._runFlag = True
         self.daemon = True
         self.start()
+
+    def disconnect(self):
+        print("disconnect")
+        if self._runFlag:
+            self._ws.close()
+            self._runFlag = False
 
     def run(self):
         """Run of thread"""
         # print("ok")
-        while self.runFlag:
+        while self.is_connect():
             self._callback()
+
+        self.disconnect()
+        self._runFlag = False
+    # def on_close(_ws):
+    #     print("### closed ###")
+
+    def is_connect(self):
+        return self._connect_flag
 
     def _advertise(self, topic_name, topic_type):
         """
@@ -72,7 +111,14 @@ class WebsocketROSClient(Thread, object):
                          "topic": topic_name,
                          "type": topic_type
                          }
-        self.ws.send(json.dumps(advertise_msg))
+        # send if connect
+        if self.is_connect():
+            try:
+                self._ws.send(json.dumps(advertise_msg))
+            except:
+                self._connect_flag = False
+                return
+
         return new_uuid
 
     def _unadvertise(self, uuid):
@@ -80,14 +126,24 @@ class WebsocketROSClient(Thread, object):
                     "id": uuid,
                     # "topic": topic_name
                     }
-        self.ws.send(json.dumps(unad_msg))
+
+        # send if connect
+        if self.is_connect():
+            try:
+                self._ws.send(json.dumps(unad_msg))
+            except:
+                self._connect_flag = False
+                return
+
 
     def __del__(self):
         """Cleanup all advertisings"""
         d = self._advertise_dict
         for k in d:
             self._unadvertise(k)
-        self.runFlag = False
+
+        self._ws.close()
+        self._runFlag = False
         self.join()
         print("stop")
 
@@ -104,7 +160,14 @@ class WebsocketROSClient(Thread, object):
             'msg': message
         }
         json_msg = json.dumps(msg)
-        self.ws.send(json_msg)
+
+        # send if connect
+        if self.is_connect():
+            try:
+                self._ws.send(json_msg)
+            except:
+                self._connect_flag = False
+                return
 
     def publish(self, topic_name, ros_message):
         """
@@ -114,13 +177,15 @@ class WebsocketROSClient(Thread, object):
             from sensor_msgs/LaserScan.
         """
         # First check if we already advertised the topic
+
+
         d = self._advertise_dict
         for k in d:
             if d[k]['topic_name'] == topic_name:
                 # Already advertised, do nothing
                 break
         else:
-            # Not advertised, so we advertise
+        # Not advertised, so we advertise
             topic_type = ros_message._type
             self._advertise(topic_name, topic_type)
         # Converting ROS message to a dictionary thru YAML
@@ -138,15 +203,16 @@ class WebsocketROSClient(Thread, object):
 
         self.sub_list[topic_name] = [msgs_data, pub_topic_name, pub]
 
+    def _subscribe(self, topic_name, msgs_data):
         pub_msg = {
             'op': 'subscribe',
             'topic': topic_name,
-            'msgs_data' : msgs_data._type
+            'msgs_data': msgs_data._type
         }
 
         # send to server
         json_msg = json.dumps(pub_msg)
-        self.ws.send(json_msg)
+        self._ws.send(json_msg)
         self.initFlaf = True
         print("%s | Sub to: %s msgs_data: %s" % (self.name, topic_name, msgs_data._type))
 
@@ -157,11 +223,18 @@ class WebsocketROSClient(Thread, object):
         :param str topic_name: ROS topic name.
         :param dict msg: Dictionary containing the definition of the message.
         """
-        if not self.initFlaf:
+        if not self._runFlag:
             return
 
-        json_message = self.ws.recv()
-        # print(json_message)
+        # send if connect
+        try:
+            json_message = self._ws.recv()
+            self._connect_flag = True
+        except:
+            self._connect_flag = False
+            self._runFlag = False
+            print("connected loss")
+            return
 
         type_msg = json.loads(json_message)['op']
         print(type_msg)
@@ -195,41 +268,12 @@ class WebsocketROSClient(Thread, object):
 
         # send to server
         json_msg = json.dumps(pub_msg)
-        self.ws.send(json_msg)
+        # send if connect
+        if self.is_connect():
+            try:
+                self._ws.send(json_msg)
+            except:
+                self._connect_flag = False
+                return
+
         print("%s | call_service: %s msgs_data: %s" % (self.name,topic_name, msgs_data))
-
-
-
-
-#
-# if __name__ == '__main__':
-#     rospy.init_node('websicket_pub', anonymous=True)
-#
-#     rate = rospy.Rate(10)
-#
-#     # subscribe to servise and pub to ros pub
-#     connect = WebsocketROSClient('192.168.128.10', 9090)
-#     connect.subscribe('/mavros/local_position/pose', PoseStamped(), '/mavros/local_position/pose')
-#     # connect.subscribe('/mavros/imu/data', Imu(),"/test2")
-#     # call test service
-#     srv_pub = AddTwoIntsRequest()
-#     srv_pub.a = 4
-#     srv_pub.b = 6
-#     connect.call_service('add_two_ints', srv_pub)
-#
-#     try:
-#         while not rospy.is_shutdown():
-#             # Publish to server
-#             pose = PoseStamped()
-#             pose.header = Header()
-#             pose.header.stamp = rospy.Time.now()
-#             pose.header.frame_id = "map"
-#             pose.pose.position.x = 1.5
-#             connect.publish("/pose",pose)
-#
-#             rate.sleep()
-#
-#     except:
-#         print("exit")
-#         # connect.stop()
-#         raise

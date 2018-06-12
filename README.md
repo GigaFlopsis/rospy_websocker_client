@@ -29,9 +29,18 @@ Usage
 Init websocket client:
 
 ``` python
-    from WebsocketROSClient import WebsocketROSClient as ros_ws
+    from rospy_websocker_client import WebsocketROSClient as ros_ws
     connect = ros_ws('128.0.0.1', 9090) # ip, port, name of client
+    ws_client.connect()
+
  ```
+
+Disconnect:
+``` python
+    ws_client.disconnect()
+
+ ```
+
 Subscribe to topics from server:
 
 ``` python
