@@ -18,21 +18,48 @@ import rospy
 from rospy_message_converter import message_converter
 from rospy import Header
 
+from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtWidgets import QApplication, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
 """
 
 """
+#
+# class ws_calback(QObject):
+#     calback_signal = pyqtSignal()
+#
+#     def __init__(self):
+#         super(ws_calback,self).__init__()
+#         self.abort = False
+#         self.ws = None
+#         pass
+#
+#     def get_ws(self, data):
+#         print("send ws")
+#         self.ws = data
+#
+#     @pyqtSlot()
+#     def update(self):
+#         print("init thread")
+#         while True:
+#             # self.calback_signal.emit()
+#             QApplication.processEvents()
+#             if self.abort:
+#                 break
+#         print("stop thread")
 
 
-class ws_client(Thread):
-    def __init__(self, websocket_ip, port=9090, name =''):
+class ws_client(QObject):
+    param_ws_signal = pyqtSignal(object)
+    calback_signal = pyqtSignal()
+
+    def __init__(self, websocket_ip, port=9090, name ='', frame_id = "map"):
+        super(ws_client,self).__init__()
         """
         Class to manage publishing to ROS thru a rosbridge websocket.
         :param str websocket_ip: IP of the machine with the rosbridge server.
         :param int port: Port of the websocket server, defaults to 9090.
         """
-        Thread.__init__(self)
-
 
         self.name = websocket_ip if name == '' else name
         self._ip = websocket_ip
@@ -42,6 +69,8 @@ class ws_client(Thread):
         # List for for each sub topic.
         # Where: key = sub_topic; data = [type_data, pub_topic_name,rospy.Publisher(..)]
         self.sub_list = {}
+        self.frame_id = frame_id
+        self.abort = False
 
         self._runFlag = False
         self._connect_flag = False
@@ -49,11 +78,35 @@ class ws_client(Thread):
         self._ws = None
         self._advertise_dict = {}
 
-        self.daemon = True #param for tread
+        self.ws_cb_t = QThread()
+        self.moveToThread(self.ws_cb_t)
+        self.ws_cb_t.started.connect(self.update)
+        self.ws_cb_t.start()
+
+    @pyqtSlot()
+    def update(self):
+        print("init thread")
+        while True:
+            self._callback()
+            QApplication.processEvents()
+            if self.abort:
+                print("break")
+                break
+        print("stop thread")
+
+    def setIp(self, ipStr):
+        self._ip = ipStr
+        print("set ip",self._ip)
+
+    def setPort(self, port):
+        try:
+            self._port = int(port)
+            print("set port", self._port)
+        except:
+            pass
 
     def connect(self, ip = None, port = None):
-
-        if self._runFlag or self.is_connect() :
+        if self.is_connected() :
             print("The client is already connected")
             return
         if ip == None:
@@ -63,7 +116,6 @@ class ws_client(Thread):
 
         print("%s:%s\t|\tConnection to server" %(ip, port))
         try:
-
             self._ws = websocket.create_connection(
                 'ws://' + ip + ':' + str(port))
         except:
@@ -71,34 +123,27 @@ class ws_client(Thread):
             return
         print("%s:%s\t|\tThe connection is successful: " %(ip,port))
 
-        self._advertise_dict = {}
+
+        # self.param_ws_signal.emit(self._ws)
         self._connect_flag = True
+
+        self._advertise_dict = {}
 
         # subscribe to
         for key in self.sub_list:
             self._subscribe(key,self.sub_list[key][0])
-
         self._runFlag = True
-        self.daemon = True
-        self.start()
 
     def disconnect(self):
         print("disconnect")
-        if self._runFlag:
-            self.__del__()
+        """Cleanup all advertisings"""
+        d = self._advertise_dict
+        for k in d:
+            self._unadvertise(k)
+        self._connect_flag = False
+        self._ws.close()
 
-    def run(self):
-        """Run of thread"""
-        # print("ok")
-        while self.is_connect():
-            self._callback()
-
-        self.disconnect()
-        self._runFlag = False
-    # def on_close(_ws):
-    #     print("### closed ###")
-
-    def is_connect(self):
+    def is_connected(self):
         return self._connect_flag
 
     def _advertise(self, topic_name, topic_type):
@@ -117,7 +162,7 @@ class ws_client(Thread):
                          "type": topic_type
                          }
         # send if connect
-        if self.is_connect():
+        if self.is_connected():
             try:
                 self._ws.send(json.dumps(advertise_msg))
             except:
@@ -133,23 +178,33 @@ class ws_client(Thread):
                     }
 
         # send if connect
-        if self.is_connect():
+        if self.is_connected():
             try:
                 self._ws.send(json.dumps(unad_msg))
             except:
                 self._connect_flag = False
-                return
+
+    def offThread(self):
+        print("offThread")
+        self.abort = True
 
     def __del__(self):
-        """Cleanup all advertisings"""
+        print("ws del")
+        self.offThread()
         d = self._advertise_dict
         for k in d:
             self._unadvertise(k)
 
-        self._ws.close()
+        self._connect_flag = False
         self._runFlag = False
-        self.join()
+        self._ws.close()
+
         print("stop")
+
+        self.ws_cb.abort = True
+
+        self.ws_cb_t.quit()
+        self.ws_cb_t.wait()
 
     def _publish(self, topic_name, message):
         """
@@ -166,7 +221,7 @@ class ws_client(Thread):
         json_msg = json.dumps(msg)
 
         # send if connect
-        if self.is_connect():
+        if self.is_connected():
             try:
                 self._ws.send(json_msg)
             except:
@@ -188,7 +243,7 @@ class ws_client(Thread):
                 # Already advertised, do nothing
                 break
         else:
-        # Not advertised, so we advertise
+            # Not advertised, so we advertise
             topic_type = ros_message._type
             self._advertise(topic_name, topic_type)
         # Converting ROS message to a dictionary thru YAML
@@ -226,12 +281,14 @@ class ws_client(Thread):
         :param str topic_name: ROS topic name.
         :param dict msg: Dictionary containing the definition of the message.
         """
-        if not self._runFlag:
+        if not self.is_connected():
+            print("not connect")
             return
 
         # send if connect
         try:
             json_message = self._ws.recv()
+
             self._connect_flag = True
         except:
             self._connect_flag = False
@@ -240,15 +297,19 @@ class ws_client(Thread):
             return
 
         type_msg = json.loads(json_message)['op']
-        print(type_msg)
+
         if type_msg == 'publish':
             # conver json to ROS msgs
             msgs_conf =  self.sub_list[json.loads(json_message)['topic']]
             dictionary = json.loads(json_message)['msg']
             result =  message_converter.convert_dictionary_to_ros_message(msgs_conf[0]._type, dictionary)
-            # print("Type: '%s' \n Received: '%s'" % (msgs_conf[0]._type, result))
+            # print("===============\n"
+            #       "Type: '%s' \n"
+            #       "===============\n '%s'" % (msgs_conf[0]._type, result))
             # pub to topic
+            # result.header.frame_id = 'base_link' \
             msgs_conf[2].publish(result)
+
         if type_msg == 'service_response':
             print("service_response:", json.loads(json_message)['result'])
 
@@ -271,7 +332,7 @@ class ws_client(Thread):
         # send to server
         json_msg = json.dumps(pub_msg)
         # send if connect
-        if self.is_connect():
+        if self.is_connected():
             try:
                 self._ws.send(json_msg)
             except:
@@ -279,3 +340,7 @@ class ws_client(Thread):
                 return
 
         print("%s | call_service: %s msgs_data: %s" % (self.name,topic_name, msgs_data))
+
+
+
+
