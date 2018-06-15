@@ -24,33 +24,8 @@ from PyQt5.QtWidgets import QApplication, QPushButton, QTextEdit, QVBoxLayout, Q
 """
 
 """
-#
-# class ws_calback(QObject):
-#     calback_signal = pyqtSignal()
-#
-#     def __init__(self):
-#         super(ws_calback,self).__init__()
-#         self.abort = False
-#         self.ws = None
-#         pass
-#
-#     def get_ws(self, data):
-#         print("send ws")
-#         self.ws = data
-#
-#     @pyqtSlot()
-#     def update(self):
-#         print("init thread")
-#         while True:
-#             # self.calback_signal.emit()
-#             QApplication.processEvents()
-#             if self.abort:
-#                 break
-#         print("stop thread")
-
 
 class ws_client(QObject):
-    param_ws_signal = pyqtSignal(object)
     calback_signal = pyqtSignal()
 
     def __init__(self, websocket_ip, port=9090, name ='', frame_id = "map"):
@@ -122,7 +97,6 @@ class ws_client(QObject):
             print("%s:%s\t|\tError connecting to server !!!" %(ip, port))
             return
         print("%s:%s\t|\tThe connection is successful: " %(ip,port))
-
 
         # self.param_ws_signal.emit(self._ws)
         self._connect_flag = True
@@ -282,7 +256,7 @@ class ws_client(QObject):
         :param dict msg: Dictionary containing the definition of the message.
         """
         if not self.is_connected():
-            print("not connect")
+            # print("not connect")
             return
 
         # send if connect
@@ -302,7 +276,7 @@ class ws_client(QObject):
             # conver json to ROS msgs
             msgs_conf =  self.sub_list[json.loads(json_message)['topic']]
             dictionary = json.loads(json_message)['msg']
-            result =  message_converter.convert_dictionary_to_ros_message(msgs_conf[0]._type, dictionary)
+            result = message_converter.convert_dictionary_to_ros_message(msgs_conf[0]._type, dictionary)
             # print("===============\n"
             #       "Type: '%s' \n"
             #       "===============\n '%s'" % (msgs_conf[0]._type, result))
