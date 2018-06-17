@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import QApplication, QPushButton, QTextEdit, QVBoxLayout, Q
 """
 
 class ws_client(QObject):
-    calback_signal = pyqtSignal()
+    connect_signal = pyqtSignal(bool)
 
     def __init__(self, websocket_ip, port=9090, name ='', frame_id = "map"):
         super(ws_client,self).__init__()
@@ -95,12 +95,15 @@ class ws_client(QObject):
                 'ws://' + ip + ':' + str(port))
         except:
             print("%s:%s\t|\tError connecting to server !!!" %(ip, port))
+            self._connect_flag = False
+            self.connect_signal.emit(False)
             return
+
         print("%s:%s\t|\tThe connection is successful: " %(ip,port))
 
         # self.param_ws_signal.emit(self._ws)
         self._connect_flag = True
-
+        self.connect_signal.emit(True)
         self._advertise_dict = {}
 
         # subscribe to
@@ -115,6 +118,7 @@ class ws_client(QObject):
         for k in d:
             self._unadvertise(k)
         self._connect_flag = False
+        self.connect_signal.emit(False)
         self._ws.close()
 
     def is_connected(self):
@@ -141,6 +145,7 @@ class ws_client(QObject):
                 self._ws.send(json.dumps(advertise_msg))
             except:
                 self._connect_flag = False
+                self.connect_signal.emit(False)
                 return
 
         return new_uuid
@@ -157,6 +162,7 @@ class ws_client(QObject):
                 self._ws.send(json.dumps(unad_msg))
             except:
                 self._connect_flag = False
+                self.connect_signal.emit(False)
 
     def offThread(self):
         print("offThread")
@@ -170,6 +176,7 @@ class ws_client(QObject):
             self._unadvertise(k)
 
         self._connect_flag = False
+        self.connect_signal.emit(False)
         self._runFlag = False
         self._ws.close()
 
@@ -200,6 +207,7 @@ class ws_client(QObject):
                 self._ws.send(json_msg)
             except:
                 self._connect_flag = False
+                self.connect_signal.emit(False)
                 return
 
     def publish(self, topic_name, ros_message):
@@ -264,8 +272,10 @@ class ws_client(QObject):
             json_message = self._ws.recv()
 
             self._connect_flag = True
+            self.connect_signal.emit(True)
         except:
             self._connect_flag = False
+            self.connect_signal.emit(False)
             self._runFlag = False
             print("connected loss")
             return
@@ -311,6 +321,7 @@ class ws_client(QObject):
                 self._ws.send(json_msg)
             except:
                 self._connect_flag = False
+                self.connect_signal.emit(False)
                 return
 
         print("%s | call_service: %s msgs_data: %s" % (self.name,topic_name, msgs_data))
