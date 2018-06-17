@@ -60,14 +60,13 @@ class ws_client(QObject):
 
     @pyqtSlot()
     def update(self):
-        print("init thread")
+        print("%s:%s\t|\tStart the thread of callback" %(self._ip,self._port))
         while True:
             self._callback()
             QApplication.processEvents()
             if self.abort:
-                print("break")
                 break
-        print("stop thread")
+        print("%s:%s\t|\tStop the thread of callback" %(self._ip,self._port))
 
     def setIp(self, ipStr):
         self._ip = ipStr
@@ -112,14 +111,16 @@ class ws_client(QObject):
         self._runFlag = True
 
     def disconnect(self):
-        print("disconnect")
+        print("%s:%s\t|\tDisconnect: " %(self._ip,self._port))
         """Cleanup all advertisings"""
         d = self._advertise_dict
         for k in d:
             self._unadvertise(k)
         self._connect_flag = False
         self.connect_signal.emit(False)
-        self._ws.close()
+
+        if self._ws is not None:
+            self._ws.close()
 
     def is_connected(self):
         return self._connect_flag
@@ -164,28 +165,20 @@ class ws_client(QObject):
                 self._connect_flag = False
                 self.connect_signal.emit(False)
 
-    def offThread(self):
-        print("offThread")
+    def _killThread(self):
         self.abort = True
+        self.ws_cb_t.quit()
+        self.ws_cb_t.wait()
 
     def __del__(self):
-        print("ws del")
-        self.offThread()
-        d = self._advertise_dict
-        for k in d:
-            self._unadvertise(k)
+        self._killThread()
+
+        self.disconnect()
 
         self._connect_flag = False
         self.connect_signal.emit(False)
         self._runFlag = False
-        self._ws.close()
-
-        print("stop")
-
-        self.ws_cb.abort = True
-
-        self.ws_cb_t.quit()
-        self.ws_cb_t.wait()
+        print("%s:%s\t|\tDelete websocket: " %(self._ip,self._port))
 
     def _publish(self, topic_name, message):
         """
@@ -264,13 +257,11 @@ class ws_client(QObject):
         :param dict msg: Dictionary containing the definition of the message.
         """
         if not self.is_connected():
-            # print("not connect")
             return
 
         # send if connect
         try:
             json_message = self._ws.recv()
-
             self._connect_flag = True
             self.connect_signal.emit(True)
         except:
