@@ -62,10 +62,10 @@ class ws_client(QObject):
     def update(self):
         print("%s:%s\t|\tStart the thread of callback" %(self._ip,self._port))
         while True:
-            self._callback()
-            QApplication.processEvents()
             if self.abort:
                 break
+            self._callback()
+            QApplication.processEvents()
         print("%s:%s\t|\tStop the thread of callback" %(self._ip,self._port))
 
     def setIp(self, ipStr):
@@ -264,6 +264,7 @@ class ws_client(QObject):
             json_message = self._ws.recv()
             self._connect_flag = True
             self.connect_signal.emit(True)
+            type_msg = json.loads(json_message)['op']
         except:
             self._connect_flag = False
             self.connect_signal.emit(False)
@@ -271,7 +272,6 @@ class ws_client(QObject):
             print("connected loss")
             return
 
-        type_msg = json.loads(json_message)['op']
 
         if type_msg == 'publish':
             # conver json to ROS msgs
