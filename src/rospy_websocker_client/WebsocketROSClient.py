@@ -13,7 +13,7 @@ import yaml
 from threading import Thread
 import time
 import sys
-
+import math
 import rospy
 from rospy_message_converter import message_converter
 from rospy import Header
@@ -275,14 +275,30 @@ class ws_client(QObject):
 
         if type_msg == 'publish':
             # conver json to ROS msgs
-            msgs_conf =  self.sub_list[json.loads(json_message)['topic']]
+            msgs_conf = self.sub_list[json.loads(json_message)['topic']]
             dictionary = json.loads(json_message)['msg']
             result = message_converter.convert_dictionary_to_ros_message(msgs_conf[0]._type, dictionary)
             # print("===============\n"
             #       "Type: '%s' \n"
             #       "===============\n '%s'" % (msgs_conf[0]._type, result))
             # pub to topic
-            # result.header.frame_id = 'base_link' \
+
+            #fix of unicode
+            try:
+                result.header.frame_id = str(header.frame_id)
+            except:
+                pass
+
+            #fix of laserscan
+            if msgs_conf[0]._type == 'sensor_msgs/LaserScan':
+
+                for i in range(len(result.ranges)):
+                    if result.ranges[i] == None:
+                        result.ranges[i] = float('inf')
+                    else:
+                        result.ranges[i] = float(result.ranges[i])
+
+
             msgs_conf[2].publish(result)
 
         if type_msg == 'service_response':
