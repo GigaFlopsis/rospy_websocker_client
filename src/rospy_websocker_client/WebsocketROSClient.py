@@ -42,7 +42,7 @@ class ws_client(QObject):
 
 
         # List for for each sub topic.
-        # Where: key = sub_topic; data = [type_data, pub_topic_name,rospy.Publisher(..)]
+        # Where: key = sub_topic; data = [type_data, pub_topic_name,rospy.Publisher(..),rate,queue_length]
         self.sub_list = {}
         self.frame_id = frame_id
         self.abort = False
@@ -107,7 +107,7 @@ class ws_client(QObject):
 
         # subscribe to
         for key in self.sub_list:
-            self._subscribe(key,self.sub_list[key][0])
+            self._subscribe(key,self.sub_list[key][0],self.sub_list[key][3],self.sub_list[key][4])
         self._runFlag = True
 
     def disconnect(self):
@@ -226,21 +226,26 @@ class ws_client(QObject):
         # Publishing
         self._publish(topic_name, ros_message_as_dict)
 
-    def subscribe(self, topic_name, msgs_data, pub_topic_name =''):
+    def subscribe(self, topic_name, msgs_data, pub_topic_name ='', rate = 0,queue_length=0):
 
         if pub_topic_name == '':
             pub_topic_name = topic_name
 
         # added to list
-        pub = rospy.Publisher(pub_topic_name, msgs_data.__class__, queue_size=10)
+        pub = rospy.Publisher(pub_topic_name, msgs_data.__class__, queue_size=queue_length)
 
-        self.sub_list[topic_name] = [msgs_data, pub_topic_name, pub]
+        self.sub_list[topic_name] = [msgs_data, pub_topic_name, pub, rate, queue_length]
 
-    def _subscribe(self, topic_name, msgs_data):
-        pub_msg = {
+    def _subscribe(self, topic_name, msgs_data, rate = 0.0, queue_length = 0):
+        if rate > 0:
+			rate = 1000.0/rate
+			
+		pub_msg = {
             'op': 'subscribe',
             'topic': topic_name,
-            'msgs_data': msgs_data._type
+            'msgs_data': msgs_data._type,
+			'throttle_rate': rate,
+			'queue_length ': queue_length
         }
 
         # send to server
