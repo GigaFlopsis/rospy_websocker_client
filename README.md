@@ -48,6 +48,9 @@ Subscribe to topics from server:
     # 1. The name of the topic server;
     # 2. The type of topic
     # 3. The name of the topic where to publish
+    # 4. Frame rate: default = 0
+    # 5. queue_length:  default = 0
+
     ws_client.subscribe('/position', PoseStamped(), '/position')
 ```
 Publish to server:
