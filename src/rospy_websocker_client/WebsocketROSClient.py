@@ -237,22 +237,25 @@ class ws_client(QObject):
         self.sub_list[topic_name] = [msgs_data, pub_topic_name, pub, rate, queue_length]
 
     def _subscribe(self, topic_name, msgs_data, rate = 0.0, queue_length = 0):
-        if rate > 0:
-			rate = 1000.0/rate
-			
-		pub_msg = {
+
+        _rate = 0.0
+
+        if rate > 0.0:
+            _rate = 1000.0 / rate
+
+        pub_msg = {
             'op': 'subscribe',
             'topic': topic_name,
             'msgs_data': msgs_data._type,
-			'throttle_rate': rate,
-			'queue_length ': queue_length
+			'throttle_rate': int(_rate),
+			'queue_length': int(queue_length)
         }
 
         # send to server
         json_msg = json.dumps(pub_msg)
         self._ws.send(json_msg)
         self.initFlaf = True
-        print("%s:%s\t|\tSubscribe to: %s \ttype: %s" % (self._ip, self._port, topic_name, msgs_data._type))
+        print("%s:%s\t|\tSubscribe to: %s \ttype: %s \trate: %s \tqueue_length: %s" % (self._ip, self._port, topic_name, msgs_data._type, rate, queue_length))
 
     def _callback(self):
         """
